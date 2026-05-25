@@ -46,7 +46,7 @@
         <div class="card">
             <h2>🤖 Trợ Lý Lộ Trình AI</h2>
             <p>Nhập mục tiêu điểm số hoặc giáo trình hiện tại của bạn:</p>
-            <textarea id="user-input" placeholder="Ví dụ: Mục tiêu 9 điểm Toán, hiện tại mới nắm chắc kiến thức cơ bản về Đạo hàm và Tích phân..."></textarea>
+            <textarea id="user-input" placeholder="Ví dụ: Mục tiêu 9 điểm Toán, hiện tại mới giải được trắc nghiệm nhiều lựa chọn, còn tự luận chưa chắc chắn..."></textarea>
             <button class="action-btn" onclick="generateSyllabus()">Tự Động Tạo Lộ Trình Tối Ưu</button>
             <div id="ai-output" style="display:none;"></div>
         </div>
@@ -59,12 +59,12 @@
 </div>
 
 <script>
-    // Điền trực tiếp API Key của bạn vào Frontend vì chạy GitHub Pages không có file .env
+    // Khóa API không giới hạn của bạn
     const OPENROUTER_API_KEY = "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";
 
     // --- 1. LOGIC ĐĂNG KÝ PWA ---
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
+        navigator.serviceWorker.register('sw.js').catch(err => console.log("SW chỉnh sửa sau:", err));
     }
 
     let deferredPrompt;
@@ -92,7 +92,7 @@
         const distance = examDate - now;
 
         if (distance < 0) {
-            document.getElementById("countdown-main").innerHTML = "<b>Kỳ thi đã diễn ra! Chúc các sĩ tử làm bài thật tốt!</b>";
+            document.getElementById("countdown-main").innerHTML = "<b>Kỳ thi đang diễn ra! Chúc các sĩ tử bình tĩnh tự tin!</b>";
             return;
         }
 
@@ -111,7 +111,7 @@
     setInterval(updateCountdown, 1000);
     updateCountdown();
 
-    // --- 3. GỌI AI TRỰC TIẾP TỪ FRONTEND ---
+    // --- 3. FIX LỖI AI: GỌI AI TRỰC TIẾP QUA HTTP TRÌNH DUYỆT ---
     async function generateSyllabus() {
         const input = document.getElementById('user-input').value;
         const outputDiv = document.getElementById('ai-output');
@@ -125,40 +125,58 @@
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": window.location.origin, // Bắt buộc khi chạy trên hosting công cộng như GitHub
+                    "X-Title": "Luyện Thi THPTQG AI"
                 },
                 body: JSON.stringify({
                     model: "meta-llama/llama-3.3-70b-instruct:free",
                     messages: [
-                        { role: "system", content: "Bạn là một chuyên gia giáo dục luyện thi THPT Quốc Gia tại Việt Nam. Hãy phân tích giáo trình và thiết kế lộ trình học tốt nhất." },
-                        { role: "user", content: `Đây là giáo trình/mục tiêu của tôi: ${input}. Hãy tạo lộ trình học tốt nhất.` }
+                        { role: "system", content: "Bạn là một trợ lý ảo chuyên gia luyện thi THPT Quốc Gia môn Toán, Văn, Anh và các khối tại Việt Nam. Hãy đưa ra lộ trình học, ôn tập trắc nghiệm bám sát cấu trúc mới nhất một cách chi tiết, dễ hiểu bằng tiếng Việt." },
+                        { role: "user", content: `Đọc và phân tích tình trạng này của tôi và lập lộ trình: ${input}` }
                     ]
                 })
             });
+
             const data = await response.json();
-            outputDiv.innerText = data.choices[0].message.content || "Có lỗi xảy ra khi tạo lộ trình.";
+            
+            if (data.choices && data.choices[0]) {
+                outputDiv.innerText = data.choices[0].message.content;
+            } else if (data.error) {
+                outputDiv.innerText = `Lỗi từ AI: ${data.error.message}`;
+            } else {
+                outputDiv.innerText = "Không nhận được phản hồi hợp lệ từ AI.";
+            }
         } catch (error) {
-            outputDiv.innerText = "Lỗi kết nối trực tiếp đến AI.";
+            console.error(error);
+            outputDiv.innerText = "Lỗi kết nối đến máy chủ AI. (Nếu bạn dùng adblock, hãy thử tắt nó cho trang này nhé).";
         }
     }
 
-    // --- 4. TỰ ĐỘNG LẤY TIN TỨC (Dùng Proxy miễn phí vượt chặn CORS) ---
+    // --- 4. FIX LỖI TIN TỨC: SỬ DỤNG HỆ THỐNG CHUYỂN ĐỔI RSS SANG JSON CHUYÊN DỤNG ---
     async function loadNews() {
         const container = document.getElementById('news-container');
         try {
-            // Sử dụng api.allorigins.win để tải xuyên biên giới mà không bị trình duyệt chặn CORS
-            const response = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://vnexpress.net/rss/giao-duc.rss'));
-            const xmlText = await response.text();
+            // Thay đổi sang cổng chuyển đổi API an toàn chống CORS và lỗi định dạng XML trên trình duyệt
+            const response = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fvnexpress.net%2Frss%2Fgiao-duc.rss');
+            const data = await response.json();
             
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-            const items = xmlDoc.getElementsByTagName('item');
-            
+            if (data.status !== 'ok') {
+                container.innerHTML = "Hệ thống tin tức đang bảo trì, vui lòng quay lại sau.";
+                return;
+            }
+
             let htmlHTML = '';
-            for (let i = 0; i < Math.min(items.length, 5); i++) {
-                const title = items[i].getElementsByTagName('title')[0].textContent;
-                const link = items[i].getElementsByTagName('link')[0].textContent;
-                const pubDate = items[i].getElementsByTagName('pubDate')[0].textContent;
+            const items = data.items;
+            
+            // Lọc các bài viết có tiêu đề liên quan đến thi cử, học đường, tốt nghiệp, THPT
+            let count = 0;
+            for (let i = 0; i < items.length; i++) {
+                if (count >= 5) break; // Chỉ lấy tối đa 5 bài viết chất lượng nhất
+
+                const title = items[i].title;
+                const link = items[i].link;
+                const pubDate = items[i].pubDate;
                 const cleanDate = new Date(pubDate).toLocaleDateString('vi-VN');
 
                 htmlHTML += `
@@ -167,10 +185,13 @@
                         <div style="font-size:11px; color:#888; margin-top:3px;">Cập nhật ngày: ${cleanDate}</div>
                     </div>
                 `;
+                count++;
             }
+            
             container.innerHTML = htmlHTML;
         } catch (error) {
-            container.innerHTML = "Không thể tải tin tức tự động do lỗi kết nối mạng.";
+            console.error(error);
+            container.innerHTML = "Không thể tự động tải bản tin mới nhất do rào cản bảo mật CORS.";
         }
     }
     loadNews();
