@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ôn Thi THPT Quốc Gia & AI Lộ Trình</title>
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="manifest.json">
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
         .container { max-width: 1000px; margin: 0 auto; }
@@ -59,9 +59,12 @@
 </div>
 
 <script>
-    // --- 1. LOGIC ĐĂNG KÝ PWA (ĐỂ CÀI ĐẶT ĐƯỢC ỨNG DỤNG) ---
+    // Điền trực tiếp API Key của bạn vào Frontend vì chạy GitHub Pages không có file .env
+    const OPENROUTER_API_KEY = "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";
+
+    // --- 1. LOGIC ĐĂNG KÝ PWA ---
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js');
+        navigator.serviceWorker.register('sw.js');
     }
 
     let deferredPrompt;
@@ -69,7 +72,7 @@
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredPrompt = e;
-        installBtn.style.display = 'inline-block'; // Hiện nút cài đặt giống Chrome Remote Desktop
+        installBtn.style.display = 'inline-block';
     });
 
     installBtn.addEventListener('click', async () => {
@@ -81,7 +84,7 @@
         }
     });
 
-    // --- 2. ĐỒNG HỒ ĐẾM NGƯỢC CHÍNH XÁC (Mốc thi: 11/06/2026) ---
+    // --- 2. ĐỒNG HỒ ĐẾM NGƯỢC (Mốc thi: 11/06/2026) ---
     const examDate = new Date("June 11, 2026 07:30:00").getTime();
 
     function updateCountdown() {
@@ -89,7 +92,7 @@
         const distance = examDate - now;
 
         if (distance < 0) {
-            document.getElementById("countdown-main").innerHTML = "<b>Kỳ thi đã và đang diễn ra! Chúc các sĩ tử làm bài thật tốt!</b>";
+            document.getElementById("countdown-main").innerHTML = "<b>Kỳ thi đã diễn ra! Chúc các sĩ tử làm bài thật tốt!</b>";
             return;
         }
 
@@ -108,7 +111,7 @@
     setInterval(updateCountdown, 1000);
     updateCountdown();
 
-    // --- 3. GỌI AI ĐỂ TẠO GIÁO TRÌNH ---
+    // --- 3. GỌI AI TRỰC TIẾP TỪ FRONTEND ---
     async function generateSyllabus() {
         const input = document.getElementById('user-input').value;
         const outputDiv = document.getElementById('ai-output');
@@ -118,32 +121,40 @@
         outputDiv.innerText = "🤖 AI đang phân tích dữ liệu và thiết kế lộ trình cá nhân hóa cho bạn...";
 
         try {
-            const response = await fetch('/api/generate-syllabus', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userCurriculum: input })
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "meta-llama/llama-3.3-70b-instruct:free",
+                    messages: [
+                        { role: "system", content: "Bạn là một chuyên gia giáo dục luyện thi THPT Quốc Gia tại Việt Nam. Hãy phân tích giáo trình và thiết kế lộ trình học tốt nhất." },
+                        { role: "user", content: `Đây là giáo trình/mục tiêu của tôi: ${input}. Hãy tạo lộ trình học tốt nhất.` }
+                    ]
+                })
             });
             const data = await response.json();
-            outputDiv.innerText = data.result || "Có lỗi xảy ra khi tạo lộ trình.";
+            outputDiv.innerText = data.choices[0].message.content || "Có lỗi xảy ra khi tạo lộ trình.";
         } catch (error) {
-            outputDiv.innerText = "Lỗi kết nối đến máy chủ AI.";
+            outputDiv.innerText = "Lỗi kết nối trực tiếp đến AI.";
         }
     }
 
-    // --- 4. TỰ ĐỘNG THU THẬP TIN TỨC THPTQG TỪ INTERNET (Bản tin RSS) ---
+    // --- 4. TỰ ĐỘNG LẤY TIN TỨC (Dùng Proxy miễn phí vượt chặn CORS) ---
     async function loadNews() {
         const container = document.getElementById('news-container');
         try {
-            const response = await fetch('/api/thpt-news');
+            // Sử dụng api.allorigins.win để tải xuyên biên giới mà không bị trình duyệt chặn CORS
+            const response = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://vnexpress.net/rss/giao-duc.rss'));
             const xmlText = await response.text();
             
-            // Ép kiểu chuỗi XML sang Object Document để bóc tách dữ liệu dễ dàng
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(xmlText, "text/xml");
             const items = xmlDoc.getElementsByTagName('item');
             
             let htmlHTML = '';
-            // Lấy ra 5 bài báo mới nhất liên quan đến kỳ thi/giáo dục
             for (let i = 0; i < Math.min(items.length, 5); i++) {
                 const title = items[i].getElementsByTagName('title')[0].textContent;
                 const link = items[i].getElementsByTagName('link')[0].textContent;
@@ -159,7 +170,7 @@
             }
             container.innerHTML = htmlHTML;
         } catch (error) {
-            container.innerHTML = "Không thể cập nhật tin tức tự động. Vui lòng kiểm tra lại đường truyền mạng.";
+            container.innerHTML = "Không thể tải tin tức tự động do lỗi kết nối mạng.";
         }
     }
     loadNews();
