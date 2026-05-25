@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ôn Thi THPT Quốc Gia & AI Lộ Trình</title>
+    <link rel="manifest" href="/manifest.json">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 30px; }
+        .btn-install { background: #28a745; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; display: none; margin-top: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { color: #007bff; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
+        .timer-unit { display: inline-block; background: #e9ecef; padding: 10px; border-radius: 5px; font-weight: bold; font-size: 20px; margin-right: 5px; }
+        .subject-time { font-size: 14px; color: #666; margin-top: 5px; }
+        textarea { width: 100%; height: 120px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; resize: vertical; }
+        button.action-btn { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px; margin-top: 10px; }
+        #ai-output { white-space: pre-wrap; background: #f8f9fa; padding: 15px; border-radius: 5px; font-size: 14px; margin-top: 15px; max-height: 300px; overflow-y: auto; }
+        .news-item { margin-bottom: 15px; border-left: 3px solid #007bff; padding-left: 10px; }
+        .news-item a { color: #222; text-decoration: none; font-weight: bold; }
+        .news-item a:hover { color: #007bff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Kỳ Thi Tốt Nghiệp THPT Quốc Gia 2026</h1>
+        <button id="installApp" class="btn-install">📥 Cài đặt Ứng dụng về Máy</button>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <h2>⏱️ Đếm Ngược Thời Gian</h2>
+            <div id="countdown-main">Đang tải thời gian...</div>
+            
+            <h3>📅 Lịch Thi Chi Tiết Dự Kiến (11/06 - 12/06/2026)</h3>
+            <div class="subject-time">✏️ <b>Sáng 11/06:</b> Ngữ Văn (120 phút)</div>
+            <div class="subject-time">📐 <b>Chiều 11/06:</b> Toán (90 phút)</div>
+            <div class="subject-time">🧬 <b>Sáng 12/06:</b> Bài thi tự chọn KHTN / KHXH (50 phút/môn)</div>
+        </div>
+
+        <div class="card">
+            <h2>🤖 Trợ Lý Lộ Trình AI</h2>
+            <p>Nhập mục tiêu điểm số hoặc giáo trình hiện tại của bạn:</p>
+            <textarea id="user-input" placeholder="Ví dụ: Mục tiêu 9 điểm Toán, hiện tại mới nắm chắc kiến thức cơ bản về Đạo hàm và Tích phân..."></textarea>
+            <button class="action-btn" onclick="generateSyllabus()">Tự Động Tạo Lộ Trình Tối Ưu</button>
+            <div id="ai-output" style="display:none;"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📰 Tin Tức Mới Nhất Về Kỳ Thi (Tự Động Cập Nhật)</h2>
+        <div id="news-container">Đang săn tìm tin tức mới nhất...</div>
+    </div>
+</div>
+
+<script>
+    // --- 1. LOGIC ĐĂNG KÝ PWA (ĐỂ CÀI ĐẶT ĐƯỢC ỨNG DỤNG) ---
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+    }
+
+    let deferredPrompt;
+    const installBtn = document.getElementById('installApp');
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.style.display = 'inline-block'; // Hiện nút cài đặt giống Chrome Remote Desktop
+    });
+
+    installBtn.addEventListener('click', async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') installBtn.style.display = 'none';
+            deferredPrompt = null;
+        }
+    });
+
+    // --- 2. ĐỒNG HỒ ĐẾM NGƯỢC CHÍNH XÁC (Mốc thi: 11/06/2026) ---
+    const examDate = new Date("June 11, 2026 07:30:00").getTime();
+
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const distance = examDate - now;
+
+        if (distance < 0) {
+            document.getElementById("countdown-main").innerHTML = "<b>Kỳ thi đã và đang diễn ra! Chúc các sĩ tử làm bài thật tốt!</b>";
+            return;
+        }
+
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+        document.getElementById("countdown-main").innerHTML = `
+            <div class="timer-unit">${days} Ngày</div>
+            <div class="timer-unit">${hours} Giờ</div>
+            <div class="timer-unit">${minutes} Phút</div>
+            <div class="timer-unit">${seconds} Giây</div>
+        `;
+    }
+    setInterval(updateCountdown, 1000);
+    updateCountdown();
+
+    // --- 3. GỌI AI ĐỂ TẠO GIÁO TRÌNH ---
+    async function generateSyllabus() {
+        const input = document.getElementById('user-input').value;
+        const outputDiv = document.getElementById('ai-output');
+        if (!input.trim()) return alert("Vui lòng nhập thông tin giáo trình hoặc mục tiêu!");
+
+        outputDiv.style.display = "block";
+        outputDiv.innerText = "🤖 AI đang phân tích dữ liệu và thiết kế lộ trình cá nhân hóa cho bạn...";
+
+        try {
+            const response = await fetch('/api/generate-syllabus', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userCurriculum: input })
+            });
+            const data = await response.json();
+            outputDiv.innerText = data.result || "Có lỗi xảy ra khi tạo lộ trình.";
+        } catch (error) {
+            outputDiv.innerText = "Lỗi kết nối đến máy chủ AI.";
+        }
+    }
+
+    // --- 4. TỰ ĐỘNG THU THẬP TIN TỨC THPTQG TỪ INTERNET (Bản tin RSS) ---
+    async function loadNews() {
+        const container = document.getElementById('news-container');
+        try {
+            const response = await fetch('/api/thpt-news');
+            const xmlText = await response.text();
+            
+            // Ép kiểu chuỗi XML sang Object Document để bóc tách dữ liệu dễ dàng
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const items = xmlDoc.getElementsByTagName('item');
+            
+            let htmlHTML = '';
+            // Lấy ra 5 bài báo mới nhất liên quan đến kỳ thi/giáo dục
+            for (let i = 0; i < Math.min(items.length, 5); i++) {
+                const title = items[i].getElementsByTagName('title')[0].textContent;
+                const link = items[i].getElementsByTagName('link')[0].textContent;
+                const pubDate = items[i].getElementsByTagName('pubDate')[0].textContent;
+                const cleanDate = new Date(pubDate).toLocaleDateString('vi-VN');
+
+                htmlHTML += `
+                    <div class="news-item">
+                        <a href="${link}" target="_blank">${title}</a>
+                        <div style="font-size:11px; color:#888; margin-top:3px;">Cập nhật ngày: ${cleanDate}</div>
+                    </div>
+                `;
+            }
+            container.innerHTML = htmlHTML;
+        } catch (error) {
+            container.innerHTML = "Không thể cập nhật tin tức tự động. Vui lòng kiểm tra lại đường truyền mạng.";
+        }
+    }
+    loadNews();
+</script>
+
+</body>
+</html>
